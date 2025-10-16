@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Κύπρος – Ταχυδρομικοί Κώδικες (TK) | Finder</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; grid-template-columns: 1fr 420px; height: 100%; }
+    #map { height: 100%; }
+    #panel { border-left: 1px solid #ccc; font-family: Arial, sans-serif; overflow: auto; padding: 12px; }
+    .marker-card { border-top: 1px solid #ddd; padding: 8px; }
+    .marker-card strong { display:block; margin-bottom:4px; }
+    .tk-list { font-size: 12px; max-height: 150px; overflow:auto; background:#f9f9f9; border:1px solid #ddd; padding:4px; margin-top:4px; white-space:pre-wrap; }
+    button { margin:3px; padding:5px 10px; border-radius:6px; cursor:pointer; }
+    h3 { margin-top:0; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <h3>Κύπρος – TK Finder <span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:6px;">v1.2</span></h3>
+  <div>
+    <button id="addMarkerBtn">➕ Προσθήκη Marker</button>
+    <button id="reassignBtn">🔄 Ανακατανομή</button>
+    <button id="clearBtn">🧹 Καθαρισμός</button>
+  </div>
+  <div id="markers"></div>
+  <h4>Σύνοψη Κατανομής</h4>
+  <div id="assignment"></div>
+</div>
+
+<script>
+const map = L.map('map').setView([35.1264,33.4299], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+
+const tkCentroidsLayer = L.geoJSON(null, {
+  pointToLayer:(f,latlng)=>L.circleMarker(latlng,{radius:3,color:'#2563eb'}).bindTooltip('ΤΚ: '+f.properties.postcode,{permanent:true,direction:'right'})
+}).addTo(map);
+const markersLayer = L.layerGroup().addTo(map);
+
+let tkCentroids=[];
+let markersRegistry=[];
+let nextMarkerId=1;
+window.codeAssignment=new Map();
+
+// === Εδώ βάζουμε ΟΛΟΥΣ τους 574 ΤΚ ===
+// Για παράδειγμα:
+const csvData=`postcode,lat,lon\n1010,35.1700,33.3600\n1020,35.1700,33.3700\n1030,35.1500,33.3700\n1040,35.1667,33.3667`;
+
+function parseCSV(txt){
+  const lines=txt.trim().split(/\r?\n/);
+  const header=lines.shift().split(',');
+  const iP=header.indexOf('postcode'), iLa=header.indexOf('lat'), iLo=header.indexOf('lon');
+  return lines.map(L=>{
+    const p=L.split(',');
+    return {type:'Feature',properties:{postcode:p[iP]},geometry:{type:'Point',coordinates:[parseFloat(p[iLo]),parseFloat(p[iLa])]}};
+  });
+}
+
+const feats=parseCSV(csvData);
+tkCentroidsLayer.addData(feats);
+tkCentroids=feats;
+
+function recomputeAssignments(){
+  if(!markersRegistry.length) return;
+  const assign=new Map(); markersRegistry.forEach(r=>assign.set(r.id,[]));
+  for(const f of tkCentroids){
+    let bestId=null,bestD=Infinity;
+    for(const r of markersRegistry){
+      const d=turf.distance(turf.point([r.marker.getLatLng().lng,r.marker.getLatLng().lat]),f,{units:'kilometers'});
+      if(d<bestD){bestD=d;bestId=r.id;}
+    }
+    if(bestId!=null){assign.get(bestId).push(f.properties.postcode);window.codeAssignment.set(f.properties.postcode,bestId);}
+  }
+  document.getElementById('markers').innerHTML='';
+  let total=0;
+  for(const r of markersRegistry){
+    const codes=assign.get(r.id)||[]; total+=codes.length;
+    const div=document.createElement('div');div.className='marker-card';
+    div.innerHTML=`<strong>Marker #${r.id}</strong><div>${codes.length} ΤΚ</div><div class='tk-list'>${codes.join(', ')}</div>`;
+    document.getElementById('markers').appendChild(div);
+  }
+  document.getElementById('assignment').textContent=`Σύνολο ΤΚ: ${tkCentroids.length}, Κατανεμημένοι: ${total}`;
+}
+
+function addMarker(latlng){
+  const id=nextMarkerId++;
+  const m=L.marker(latlng,{draggable:true}).addTo(markersLayer);
+  m.on('dragend',()=>recomputeAssignments());
+  markersRegistry.push({id,marker:m});
+  recomputeAssignments();
+}
+
+document.getElementById('addMarkerBtn').onclick=()=>{map.once('click',e=>addMarker(e.latlng));};
+document.getElementById('reassignBtn').onclick=()=>recomputeAssignments();
+document.getElementById('clearBtn').onclick=()=>{
+  markersLayer.clearLayers();
+  markersRegistry=[];
+  document.getElementById('markers').innerHTML='';
+  document.getElementById('assignment').textContent='';
+};
+</script>
+</body>
+</html>
