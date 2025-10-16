@@ -3,106 +3,115 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Κύπρος – Ταχυδρομικοί Κώδικες (TK) | Finder</title>
+  <title>Κύπρος – Ταχυδρομικοί Κώδικες (TK) | Finder (Overpass Online)</title>
+  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Turf.js για γεωχωρικούς υπολογισμούς -->
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+  <!-- SheetJS για εξαγωγή σε Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     html, body { height: 100%; margin: 0; }
     body { display: grid; grid-template-columns: 1fr 420px; height: 100%; }
-    #map { height: 100%; }
-    #panel { border-left: 1px solid #ccc; font-family: Arial, sans-serif; overflow: auto; padding: 12px; }
-    .marker-card { border-top: 1px solid #ddd; padding: 8px; }
-    .marker-card strong { display:block; margin-bottom:4px; }
-    .tk-list { font-size: 12px; max-height: 150px; overflow:auto; background:#f9f9f9; border:1px solid #ddd; padding:4px; margin-top:4px; white-space:pre-wrap; }
-    button { margin:3px; padding:5px 10px; border-radius:6px; cursor:pointer; }
-    h3 { margin-top:0; }
+    #map { position: relative; height: 100vh; min-height: 320px; }
+    #panel { border-left: 1px solid #e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow: auto; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
+    .panel-header h1 { margin: 0; font-size: 16px; }
+    .panel-body { padding: 12px 16px; }
+    .badge { display:inline-block; padding: 2px 8px; border-radius: 9999px; background:#eef2ff; color:#3730a3; font-weight:600; font-size:12px; }
+    .small { color:#475569; font-size:12px; }
+    .btn { display:inline-block; padding:8px 10px; border-radius:10px; background:#111827; color:#fff; border:0; cursor:pointer; font-weight:600; }
+    .btn.secondary{ background:#e5e7eb; color:#111827; }
+    .btn.warn{ background:#dc2626; }
+    .btn+.btn { margin-left: 8px; }
+    .item { border-top:1px dashed #e5e7eb; padding:8px 0; }
+    .muted{ color:#6b7280; }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .pill { padding:2px 6px; border-radius:999px; background:#f1f5f9; }
+    .foot { border-top:1px solid #e5e7eb; padding:10px 16px; font-size:12px; color:#64748b; }
+    .assign { font-size:12px; color:#334155; }
+    progress { width: 100%; height: 10px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
   </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="panel">
-  <h3>Κύπρος – TK Finder <span style="background:#d1fae5;color:#065f46;padding:2px 6px;border-radius:6px;">v1.2</span></h3>
-  <div>
-    <button id="addMarkerBtn">➕ Προσθήκη Marker</button>
-    <button id="reassignBtn">🔄 Ανακατανομή</button>
-    <button id="clearBtn">🧹 Καθαρισμός</button>
-  </div>
-  <div id="markers"></div>
-  <h4>Σύνοψη Κατανομής</h4>
-  <div id="assignment"></div>
-</div>
+  <div id="map"></div>
+  <aside id="panel">
+    <div class="panel-header">
+      <h1>Κύπρος – TK Finder <span class="badge">Overpass</span></h1>
+      <div class="small">Βάλε markers στον χάρτη. Όλοι οι ΤΚ θα <strong>μοιραστούν</strong> μοναδικά στους markers με βάση την <em>ευθεία απόσταση</em>. Τα δεδομένα ΤΚ φορτώνονται online από Overpass (OSM) με fallback σε Nominatim και αποθηκεύονται σε <span class="mono">localStorage</span>.</div>
+    </div>
+    <div class="panel-body">
+      <div class="row" style="margin-bottom:8px;">
+        <button class="btn" id="addMarkerBtn">➕ Προσθήκη Marker</button>
+        <button class="btn secondary" id="reassignBtn">🔄 Ανακατανομή ΤΚ</button>
+        <button class="btn secondary" id="exportBtn">⬇️ Εξαγωγή CSV</button>
+        <button class="btn secondary" id="exportExcelBtn">📊 Εξαγωγή Excel</button>
+        <button class="btn secondary" id="clearBtn">🧹 Καθαρισμός</button>
+      </div>
+      <div class="small muted" style="margin-bottom:12px;">Πηγή συντεταγμένων: Overpass (addr:postcode) με fallback σε Nominatim για ελλείποντες ΤΚ. Cache σε <span class="mono">tk_coords_v1</span>.</div>
+      <div id="status" class="small loading">Εκκίνηση…</div>
+      <div class="row" style="margin:8px 0;">
+        <button class="btn secondary" id="startGeoBtn">🧭 Build Συντεταγμένες</button>
+        <button class="btn secondary" id="stopGeoBtn" disabled>⏸️ Διακοπή</button>
+        <button class="btn secondary" id="clearCacheBtn">🗑️ Καθαρισμός Cache</button>
+      </div>
+      <div class="small"><progress id="geoProgress" max="100" value="0"></progress> <span id="geoCounts" class="small muted"></span></div>
+      <div class="row" style="margin:10px 0;">
+        <input id="searchInput" placeholder="Αναζήτηση ΤΚ (π.χ. 1010)" class="mono" style="flex:1; padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px;" />
+        <button class="btn secondary" id="searchBtn">🔎 Μετάβαση</button>
+      </div>
+      <div id="current"></div>
+      <h3 style="margin-top:16px;">Markers</h3>
+      <div id="markers"></div>
+      <h3 style="margin-top:16px;">Σύνοψη Κατανομής ΤΚ</h3>
+      <div id="assignment"></div>
+      <h3 style="margin-top:16px;">Tests</h3>
+      <div id="tests" class="small"></div>
+    </div>
+    <div class="foot">OpenStreetMap Overpass/Nominatim · Χρήση μόνο για δοκιμή/εκπαίδευση.</div>
+  </aside>
 
 <script>
-const map = L.map('map').setView([35.1264,33.4299], 9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+// ------------------ ΒΑΣΙΚΟΣ ΧΑΡΤΗΣ ------------------
+const map = L.map('map', { preferCanvas: true }).setView([35.1264, 33.4299], 9);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+window.addEventListener('load', ()=> setTimeout(()=> map.invalidateSize(), 200));
+window.addEventListener('resize', ()=> map.invalidateSize());
 
+// Layers
 const tkCentroidsLayer = L.geoJSON(null, {
-  pointToLayer:(f,latlng)=>L.circleMarker(latlng,{radius:3,color:'#2563eb'}).bindTooltip('ΤΚ: '+f.properties.postcode,{permanent:true,direction:'right'})
+  pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 3.5, weight: 1, fillOpacity: .7, color: '#2563eb', fillColor: '#3b82f6' })
+    .bindTooltip("ΤΚ: " + feat.properties.postcode, { permanent: false, direction: 'top' })
 }).addTo(map);
 const markersLayer = L.layerGroup().addTo(map);
+const highlightLayer = L.layerGroup().addTo(map);
 
-let tkCentroids=[];
-let markersRegistry=[];
-let nextMarkerId=1;
-window.codeAssignment=new Map();
+let addMarkerMode = false;
+let markersRegistry = [];
+let nextMarkerId = 1;
 
-// === Εδώ βάζουμε ΟΛΟΥΣ τους 574 ΤΚ ===
-// Για παράδειγμα:
-const csvData=`postcode,lat,lon\n1010,35.1700,33.3600\n1020,35.1700,33.3700\n1030,35.1500,33.3700\n1040,35.1667,33.3667`;
+// UI refs
+const addMarkerBtn = document.getElementById('addMarkerBtn');
+const clearBtn = document.getElementById('clearBtn');
+const exportBtn = document.getElementById('exportBtn');
+const exportExcelBtn = document.getElementById('exportExcelBtn');
+const reassignBtn = document.getElementById('reassignBtn');
+const startGeoBtn = document.getElementById('startGeoBtn');
+const stopGeoBtn = document.getElementById('stopGeoBtn');
+const clearCacheBtn = document.getElementById('clearCacheBtn');
+const statusDiv = document.getElementById('status');
+const markersDiv = document.getElementById('markers');
+const assignmentDiv = document.getElementById('assignment');
+const testsDiv = document.getElementById('tests');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const geoProgress = document.getElementById('geoProgress');
+const geoCounts = document.getElementById('geoCounts');
 
-function parseCSV(txt){
-  const lines=txt.trim().split(/\r?\n/);
-  const header=lines.shift().split(',');
-  const iP=header.indexOf('postcode'), iLa=header.indexOf('lat'), iLo=header.indexOf('lon');
-  return lines.map(L=>{
-    const p=L.split(',');
-    return {type:'Feature',properties:{postcode:p[iP]},geometry:{type:'Point',coordinates:[parseFloat(p[iLo]),parseFloat(p[iLa])]}};
-  });
-}
-
-const feats=parseCSV(csvData);
-tkCentroidsLayer.addData(feats);
-tkCentroids=feats;
-
-function recomputeAssignments(){
-  if(!markersRegistry.length) return;
-  const assign=new Map(); markersRegistry.forEach(r=>assign.set(r.id,[]));
-  for(const f of tkCentroids){
-    let bestId=null,bestD=Infinity;
-    for(const r of markersRegistry){
-      const d=turf.distance(turf.point([r.marker.getLatLng().lng,r.marker.getLatLng().lat]),f,{units:'kilometers'});
-      if(d<bestD){bestD=d;bestId=r.id;}
-    }
-    if(bestId!=null){assign.get(bestId).push(f.properties.postcode);window.codeAssignment.set(f.properties.postcode,bestId);}
-  }
-  document.getElementById('markers').innerHTML='';
-  let total=0;
-  for(const r of markersRegistry){
-    const codes=assign.get(r.id)||[]; total+=codes.length;
-    const div=document.createElement('div');div.className='marker-card';
-    div.innerHTML=`<strong>Marker #${r.id}</strong><div>${codes.length} ΤΚ</div><div class='tk-list'>${codes.join(', ')}</div>`;
-    document.getElementById('markers').appendChild(div);
-  }
-  document.getElementById('assignment').textContent=`Σύνολο ΤΚ: ${tkCentroids.length}, Κατανεμημένοι: ${total}`;
-}
-
-function addMarker(latlng){
-  const id=nextMarkerId++;
-  const m=L.marker(latlng,{draggable:true}).addTo(markersLayer);
-  m.on('dragend',()=>recomputeAssignments());
-  markersRegistry.push({id,marker:m});
-  recomputeAssignments();
-}
-
-document.getElementById('addMarkerBtn').onclick=()=>{map.once('click',e=>addMarker(e.latlng));};
-document.getElementById('reassignBtn').onclick=()=>recomputeAssignments();
-document.getElementById('clearBtn').onclick=()=>{
-  markersLayer.clearLayers();
-  markersRegistry=[];
-  document.getElementById('markers').innerHTML='';
-  document.getElementById('assignment').textContent='';
-};
+addMarkerBtn.onclick = ()=>{ addMarkerMode = !addMarkerMode; addMarkerBtn.textContent = addMarkerMode ? '✅ Κλικ στον χάρτη' : '➕ Προσθήκη Marker'; };
+clearBtn.onclick = ()=>{ markersLayer.clearLayers(); highlightLayer.clearLayers(); markersDiv.innerHTML=''; assignmentDiv.innerHTML=''; markersRegistry=[]; };
 </script>
 </body>
 </html>
