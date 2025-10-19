@@ -3,392 +3,237 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Κύπρος – Ταχυδρομικοί Κώδικες (TK) | Finder (Offline + Cache)</title>
+  <title>Κύπρος – TK Finder</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
-    html, body { height: 100%; margin: 0; }
-    body { display: grid; grid-template-columns: 1fr 420px; height: 100%; }
-    #map { position: relative; height: 100vh; min-height: 320px; }
-    #panel { border-left: 1px solid #e5e7eb; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; overflow: auto; }
-    .panel-header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; }
-    .panel-header h1 { margin: 0; font-size: 16px; }
-    .panel-body { padding: 12px 16px; }
-    .badge { display:inline-block; padding: 2px 8px; border-radius: 9999px; background:#eef2ff; color:#3730a3; font-weight:600; font-size:12px; }
-    .small { color:#475569; font-size:12px; }
-    .btn { display:inline-block; padding:8px 10px; border-radius:10px; background:#111827; color:#fff; border:0; cursor:pointer; font-weight:600; }
-    .btn.secondary{ background:#e5e7eb; color:#111827; }
-    .btn.warn{ background:#dc2626; }
-    .btn+.btn { margin-left: 8px; }
-    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .item { border-top:1px dashed #e5e7eb; padding:8px 0; }
-    .assign { font-size:12px; color:#334155; }
-    .tk-list { max-height:150px; overflow:auto; font-size:11px; color:#475569; margin-top:4px; border:1px solid #e5e7eb; padding:4px; border-radius:6px; background:#f9fafb; }
-    .foot { border-top:1px solid #e5e7eb; padding:10px 16px; font-size:12px; color:#64748b; }
-    progress { width: 100%; height: 10px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .muted { color:#6b7280; }
+    html,body{height:100%;margin:0}
+    body{display:grid;grid-template-columns:minmax(320px,1fr) 420px;height:100%}
+    #map{position:relative;height:100vh;min-height:320px;width:100%}
+    #panel{border-left:1px solid #e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:auto;padding:12px}
+    h1{font-size:16px;margin:0 0 6px}
+    small{color:#64748b}
+    button{padding:8px 10px;border:0;border-radius:8px;background:#111827;color:#fff;font-weight:600;cursor:pointer}
+    button.secondary{background:#e5e7eb;color:#111827}
+    button+button{margin-left:8px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0}
+    .item{border-top:1px dashed #e5e7eb;padding:6px 0}
+    .muted{color:#6b7280}
+    .list{font-size:12px;color:#334155;max-height:160px;overflow:auto}
+    .ok{background:#d1fae5;color:#065f46;border-radius:9999px;padding:2px 8px;margin-left:6px}
   </style>
 </head>
 <body>
   <div id="map"></div>
   <aside id="panel">
-    <div class="panel-header">
-      <h1>Κύπρος – TK Finder <span class="badge">Offline+Cache</span> <span class="badge" style="background:#d1fae5;color:#065f46;">v1.2</span></h1>
-      <div class="small">ΤΚ από ενσωματωμένο CSV ή από Overpass με αποθήκευση σε cache για offline χρήση.</div>
+    <h1>Κύπρος – TK Finder <span class="ok">v2.14.0</span></h1>
+    <div id="status">Εκκίνηση…</div>
+    <div class="row">
+      <input id="searchInput" placeholder="ΤΚ 4 ψηφίων ή διεύθυνση" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <button id="searchBtn">Αναζήτηση</button>
+      <button class="secondary" id="clearSearchBtn">Καθαρισμός</button>
     </div>
-    <div class="panel-body">
-      <div class="row" style="margin-bottom:8px;">
-        <button class="btn" id="addMarkerBtn">➕ Προσθήκη Marker</button>
-        <button class="btn secondary" id="reassignBtn">🔄 Ανακατανομή</button>
-        <button class="btn secondary" id="exportBtn">⬇️ Εξαγωγή CSV</button>
-        <button class="btn secondary" id="exportExcelBtn">📊 Εξαγωγή Excel</button>
-        <button class="btn secondary" id="clearBtn">🧹 Καθαρισμός</button>
-      </div>
-      <div class="row" style="margin-bottom:8px;">
-        <button class="btn" id="fetchAllBtn">🧭 Λήψη όλων (Overpass) & Αποθήκευση</button>
-        <button class="btn secondary" id="clearCacheBtn">🗑️ Καθαρισμός Cache</button>
-      </div>
-      <div id="status" class="small loading">Εκκίνηση...</div>
-      <div class="row" style="margin:10px 0;">
-        <input id="searchInput" placeholder="Αναζήτηση ΤΚ (π.χ. 1010)" class="mono" style="flex:1; padding:8px 10px; border:1px solid #e5e7eb; border-radius:10px;" />
-        <button class="btn secondary" id="searchBtn">🔎 Μετάβαση</button>
-      </div>
-      <h3 style="margin-top:12px;">Markers</h3>
-      <div id="markers"></div>
-      <h3 style="margin-top:12px;">Σύνοψη Κατανομής ΤΚ</h3>
-      <div id="assignment" class="small"></div>
-      <h3 style="margin-top:12px;">Tests</h3>
-      <div id="tests" class="small muted"></div>
+    <div id="searchResults" class="list"></div>
+    <div class="row">
+      <button id="addMarkerBtn">Προσθήκη Marker</button>
+      <button class="secondary" id="reassignBtn">Ανακατανομή</button>
+      <button class="secondary" id="toggleLabelsBtn">Labels TK</button>
+      <button class="secondary" id="exportCsvBtn">CSV</button>
+      <button class="secondary" id="exportXlsxBtn">Excel</button>
     </div>
-    <div class="foot">Offline CSV + Overpass cache</div>
-  </aside>
-
-<script>
-// ===== Χάρτης =====
-const map = L.map('map', { preferCanvas:true }).setView([35.1264, 33.4299], 9);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
-window.addEventListener('load', ()=> setTimeout(()=> map.invalidateSize(), 150));
-window.addEventListener('resize', ()=> map.invalidateSize());
-
-// Layers
-const tkCentroidsLayer = L.geoJSON(null, {
-  pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 3, color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.85 })
-    .bindTooltip('ΤΚ: '+(feat.properties && feat.properties.postcode || ''), { permanent:true, direction:'right', offset:[8,0] })
-}).addTo(map);
-const markersLayer = L.layerGroup().addTo(map);
-const highlightLayer = L.layerGroup().addTo(map);
-
-// ===== State =====
-let tkCentroids = [];
-let tkIndex = new Map();
-let addMarkerMode = false;
-let nextMarkerId = 1;
-const markersRegistry = [];
-// Μόνο 4-ψήφιοι ΤΚ (Ελεύθερη Κύπρος)
-const isFreeCYPostcode = (code)=>{ const s=String(code||'').trim(); if(s.length!==4) return false; for(let i=0;i<4;i++){ const c=s.charCodeAt(i); if(c<48||c>57) return false; } return true; };
-
-// ===== UI refs =====
-const addMarkerBtn = document.getElementById('addMarkerBtn');
-const reassignBtn = document.getElementById('reassignBtn');
-const exportBtn = document.getElementById('exportBtn');
-const exportExcelBtn = document.getElementById('exportExcelBtn');
-const clearBtn = document.getElementById('clearBtn');
-const statusDiv = document.getElementById('status');
-const searchInput = document.getElementById('searchInput');
-const searchBtn = document.getElementById('searchBtn');
-const markersDiv = document.getElementById('markers');
-const assignmentDiv = document.getElementById('assignment');
-const testsDiv = document.getElementById('tests');
-const fetchAllBtn = document.getElementById('fetchAllBtn');
-const clearCacheBtn = document.getElementById('clearCacheBtn');
-
-// ===== Markers =====
-addMarkerBtn.onclick = ()=>{ addMarkerMode = !addMarkerMode; addMarkerBtn.textContent = addMarkerMode ? '✅ Κλικ στον χάρτη' : '➕ Προσθήκη Marker'; };
-reassignBtn.onclick = ()=> recomputeAssignments();
-clearBtn.onclick = ()=>{ markersLayer.clearLayers(); highlightLayer.clearLayers(); markersRegistry.splice(0); markersDiv.innerHTML=''; assignmentDiv.innerHTML=''; };
-map.on('click', e=>{ if(!addMarkerMode) return; addMarker(e.latlng); addMarkerMode=false; addMarkerBtn.textContent='➕ Προσθήκη Marker'; });
-
-function addMarker(latlng){
-  const id = nextMarkerId++;
-  const m = L.marker(latlng,{draggable:true}).addTo(markersLayer);
-  m.on('dragend', ()=>{ updateMarkerCard(id); recomputeAssignments(); const ent=markersRegistry.find(x=>x.id===id); if(ent && ent.label) ent.label.setLatLng(m.getLatLng()); });
-  markersRegistry.push({id, marker:m, note:'', label:null});
-  renderMarkerCard(id);
-  attachNoteHandler(id);
-  updateMarkerCard(id);
-  m.bindPopup(`Marker #${id}`);
-  recomputeAssignments();
-}
-function renderMarkerCard(id){
-  const wrap=document.createElement('div'); wrap.className='item'; wrap.id=`marker-card-${id}`;
-  wrap.innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;">
-      <div><strong>Marker #${id}</strong> <span class="assign" id="assign-count-${id}"></span> <span class="small muted" id="marker-note-preview-${id}"></span></div>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".geojson,.json,.csv,.txt" style="display:none"/>
+      <button class="secondary" id="importBtn">Εισαγωγή επίσημου GeoJSON/CSV</button>
+      <button class="secondary" id="clearCacheBtn">Καθαρισμός cache</button>
+    </div>
+    <div class="row">
+      <button class="secondary" id="pasteListBtn">Εισαγωγή λίστας ΤΚ (χωρίς συντετ.)</button>
+    </div>
+    <div class="row" id="pasteBox" style="display:none;flex-direction:column;gap:6px">
+      <textarea id="pasteArea" placeholder="Επικόλλησε εδώ ΤΚ (π.χ. 1010,1011 ή ένας ανά γραμμή)" style="width:100%;height:110px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"></textarea>
       <div>
-        <button class="btn secondary" onclick="zoomToMarker(${id})">🔎 Zoom</button>
-        <button class="btn warn" onclick="removeMarker(${id})">✖︎</button>
+        <button id="geocodeListBtn">Γεωκωδικοποίηση λίστας</button>
+        <small class="muted">Χρησιμοποιεί Nominatim (σειριακά) & αποθήκευση σε cache.</small>
       </div>
     </div>
-    <div id="marker-pos-${id}" class="small" style="color:#6b7280;"></div>
-    <input id="marker-note-${id}" class="mono" placeholder="Σημείωση/Όνομα (π.χ. Ομάδα Α)" style="width:100%; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px; margin:6px 0;" />
-    <div id="marker-tklist-${id}" class="tk-list"></div>
-  `;
-  markersDiv.prepend(wrap);
-}
-function updateMarkerCard(id){
-  const entry = markersRegistry.find(x=>x.id===id); if(!entry) return; const ll = entry.marker.getLatLng();
-  const el = document.getElementById(`marker-pos-${id}`); if(el) el.textContent = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-}
-window.zoomToMarker = function(id){ const ent=markersRegistry.find(x=>x.id===id); if(ent) map.panTo(ent.marker.getLatLng()); };
-function attachNoteHandler(id){
-  const entry = markersRegistry.find(x=>x.id===id); if(!entry) return;
-  const input = document.getElementById(`marker-note-${id}`);
-  const preview = document.getElementById(`marker-note-preview-${id}`);
-  if(!input) return;
-  input.value = entry.note || '';
-  const apply = ()=>{
-    entry.note = input.value.trim();
-    if(preview) preview.textContent = entry.note ? `· ${entry.note}` : '';
-    try{ entry.marker.unbindTooltip(); }catch{}
-    if(entry.label) { map.removeLayer(entry.label); entry.label=null; }
-    if(entry.note){
-      entry.label = L.tooltip({permanent:true, direction:'top', offset:[0,-20]}).setContent(entry.note).setLatLng(entry.marker.getLatLng());
-      entry.label.addTo(map);
-    }
-  };
-  input.addEventListener('input', apply);
-  apply();
-}
+    <div class="row" style="border-top:1px dashed #e5e7eb;padding-top:8px">
+      <strong>GitHub Cloud Save</strong>
+    </div>
+    <div class="row" style="gap:6px">
+      <input id="ghOwner" placeholder="owner" style="width:120px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <input id="ghRepo" placeholder="repo" style="width:140px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <input id="ghBranch" placeholder="branch (π.χ. main)" style="width:140px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+    </div>
+    <div class="row" style="gap:6px">
+      <input id="ghPath" placeholder="path (state.json)" value="state.json" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+    </div>
+    <div class="row" style="gap:6px">
+      <input id="ghToken" type="password" placeholder="GitHub Token (repo:contents)" style="flex:1;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <button id="ghSaveBtn">GitHub Save</button>
+      <button class="secondary" id="ghLoadBtn">GitHub Load</button>
+    </div>
+    </div>
+    <div class="row" style="border-top:1px dashed #e5e7eb;padding-top:8px">
+      <strong>Γρήγορη διόρθωση ΤΚ</strong>
+    </div>
+    <div class="row" id="quickEditRow" style="gap:6px;align-items:flex-start">
+      <input id="qePostcode" placeholder="ΤΚ (4 ψηφία)" style="width:90px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <input id="qeLat" placeholder="lat" style="width:120px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <input id="qeLon" placeholder="lon" style="width:120px;padding:8px;border:1px solid #e5e7eb;border-radius:8px"/>
+      <button class="secondary" id="qePick">Pick από χάρτη</button>
+      <button id="qeApply">Ενημέρωση ΤΚ</button>
+    </div>
+    <div class="row">
+      <button class="secondary" id="saveStateBtn">Αποθήκευση κατάστασης (JSON)</button>
+      <button class="secondary" id="loadStateBtn">Φόρτωση κατάστασης</button>
+    </div>
+    <div class="item">
+      <div class="muted">Markers</div>
+      <div id="markers"></div>
+    </div>
+    <div class="item">
+      <div class="muted">Σύνοψη</div>
+      <div id="summary"></div>
+    </div>
+  </aside>
+<script>
+// ——— Map init
+const map=L.map('map').setView([35.1667,33.3667],10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
 
-window.removeMarker = function(id){
-  const idx=markersRegistry.findIndex(x=>x.id===id); if(idx<0) return; 
-  const ent=markersRegistry[idx];
-  if(ent.label) map.removeLayer(ent.label);
-  markersLayer.removeLayer(ent.marker);
-  markersRegistry.splice(idx,1);
-  const card=document.getElementById(`marker-card-${id}`); if(card) card.remove(); recomputeAssignments();
-};
+// ——— DOM refs
+const statusDiv=document.getElementById('status');
+const addMarkerBtn=document.getElementById('addMarkerBtn');
+const reassignBtn=document.getElementById('reassignBtn');
+const exportCsvBtn=document.getElementById('exportCsvBtn');
+const exportXlsxBtn=document.getElementById('exportXlsxBtn');
+const toggleLabelsBtn=document.getElementById('toggleLabelsBtn');
+const searchInput=document.getElementById('searchInput');
+const searchBtn=document.getElementById('searchBtn');
+const clearSearchBtn=document.getElementById('clearSearchBtn');
+const searchResults=document.getElementById('searchResults');
+const markersDiv=document.getElementById('markers');
+const summaryDiv=document.getElementById('summary');
+const importBtn=document.getElementById('importBtn');
+const clearCacheBtn=document.getElementById('clearCacheBtn');
+const fileInput=document.getElementById('fileInput');
+const pasteListBtn=document.getElementById('pasteListBtn');
+const pasteBox=document.getElementById('pasteBox');
+const pasteArea=document.getElementById('pasteArea');
+const geocodeListBtn=document.getElementById('geocodeListBtn');
+const qePostcode=document.getElementById('qePostcode');
+const qeLat=document.getElementById('qeLat');
+const qeLon=document.getElementById('qeLon');
+const qePick=document.getElementById('qePick');
+const qeApply=document.getElementById('qeApply');
+const saveStateBtn=document.getElementById('saveStateBtn');
+const loadStateBtn=document.getElementById('loadStateBtn');
+const ghOwner=document.getElementById('ghOwner');
+const ghRepo=document.getElementById('ghRepo');
+const ghBranch=document.getElementById('ghBranch');
+const ghPath=document.getElementById('ghPath');
+const ghToken=document.getElementById('ghToken');
+const ghSaveBtn=document.getElementById('ghSaveBtn');
+const ghLoadBtn=document.getElementById('ghLoadBtn');
 
-// ===== Toggle TK labels =====
-let tkLabelsVisible=true;
-function updateTkLabels(){
-  if(tkLabelsVisible){
-    tkCentroidsLayer.eachLayer(l=> l.openTooltip());
-  } else {
-    tkCentroidsLayer.eachLayer(l=> l.closeTooltip());
-  }
-}
+// ——— Layers/state
+let labelsVisible=true;
+const tkLayer=L.geoJSON(null,{pointToLayer:(f,latlng)=>L.circleMarker(latlng,{radius:3,weight:1,color:'#2563eb',fillColor:'#3b82f6',fillOpacity:.7}).bindTooltip('ΤΚ '+String(f.properties.postcode),{permanent:labelsVisible,offset:[8,0],direction:'right'})}).addTo(map);
+const searchLayer=L.layerGroup().addTo(map);
+const markersLayer=L.layerGroup().addTo(map);
+let tkIndex=new Map();
+let registry=[];let nextId=1;let addMode=false;
 
-// Add toggle button
-const toggleTkBtn=document.createElement('button');
- toggleTkBtn.className='btn secondary';
- toggleTkBtn.textContent='👁️ Εναλλαγή ΤΚ Labels';
- toggleTkBtn.onclick=()=>{ tkLabelsVisible=!tkLabelsVisible; updateTkLabels(); };
- document.querySelector('.panel-body').prepend(toggleTkBtn);
+function setLabels(v){labelsVisible=v;tkLayer.eachLayer(l=>{v?l.openTooltip():l.closeTooltip()});}
 
-// ===== Offline CSV Data (ενσωματωμένο ή από cache) =====
-let csvData = (localStorage.getItem('tk_offline_csv') || `postcode,lat,lon\n1010,35.1667,33.3667\n1020,35.1700,33.3700\n1030,35.1500,33.3700\n2000,34.6750,33.0333\n2100,35.1000,33.4167\n2200,35.0417,33.5000\n2410,35.1667,33.3667\n3100,34.6833,33.0333\n4000,34.9167,33.6333\n6015,34.9167,33.6333\n8500,34.7667,32.4167`);
+// ——— CSV/GeoJSON helpers
+function fromCSV(csv){const lines=String(csv).trim().split(/\r?\n/).filter(Boolean);if(!lines.length)return[];const head=lines[0].split(',').map(s=>s.trim().toLowerCase());const idx=(names)=>{for(let i=0;i<names.length;i++){const k=names[i];const j=head.indexOf(k);if(j>-1)return j;}return -1;};const iP=idx(['postcode','post_code','tk','postalcode','postal_code']);const iLa=idx(['lat','latitude','y']);const iLo=idx(['lon','lng','longitude','x']);if(iP<0||iLa<0||iLo<0)throw new Error('Το CSV πρέπει να έχει στήλες: postcode, lat, lon');const feats=[];for(let i=1;i<lines.length;i++){const p=lines[i].split(',');const pc=(p[iP]||'').trim();const la=parseFloat(p[iLa]);const lo=parseFloat(p[iLo]);if(pc&&isFinite(la)&&isFinite(lo)){feats.push({type:'Feature',properties:{postcode:String(pc)},geometry:{type:'Point',coordinates:[lo,la]}});}}return feats;}
+function toCSV(feats){const header='postcode,lat,lon\n';const body=feats.map(f=>String(f.properties.postcode)+','+f.geometry.coordinates[1]+','+f.geometry.coordinates[0]).join('\n');return header+body;}
+function fromGeoJSON(json){const gj=typeof json==='string'?JSON.parse(json):json;if(!gj||!Array.isArray(gj.features))return[];const feats=[];const seen=new Set();for(let i=0;i<gj.features.length;i++){const f=gj.features[i]||{};const p=f.properties||{};let code=p.POST_CODE||p.post_code||p.postcode||p.PostalCode||p.postalCode||p.code||p.tk;if(!code) continue;code=String(code).trim();if(!/^\d{4}$/.test(code)) continue;let coord=null;if(f.geometry&&f.geometry.type==='Point'){coord=f.geometry.coordinates;}else{try{coord=turf.centerOfMass(f).geometry.coordinates;}catch(e){try{coord=turf.center(f).geometry.coordinates;}catch(_){coord=null}}}if(coord&&Number.isFinite(coord[0])&&Number.isFinite(coord[1])){if(!seen.has(code)){feats.push({type:'Feature',properties:{postcode:code},geometry:{type:'Point',coordinates:[coord[0],coord[1]]}});seen.add(code);}}}return feats;}
 
-function parseCSV(txt){
-  const lines=txt.split(/\r?\n/).filter(Boolean);
-  const header=lines.shift().split(',').map(h=>h.trim());
-  const idxPost=header.indexOf('postcode');
-  const idxLat=header.indexOf('lat');
-  const idxLon=header.indexOf('lon');
-  if(idxPost<0||idxLat<0||idxLon<0) throw new Error('CSV must have postcode, lat, lon');
-  const feats=[];
-  for(const line of lines){
-    const parts=line.split(',');
-    const pc=parts[idxPost]; const lat=parseFloat(parts[idxLat]); const lon=parseFloat(parts[idxLon]);
-    if(!pc||isNaN(lat)||isNaN(lon)) continue;
-    if(!isFreeCYPostcode(pc)) continue;
-    feats.push({type:'Feature',properties:{postcode:pc},geometry:{type:'Point',coordinates:[lon,lat]}});
-  }
-  return feats;
-}
+// ——— Load & cache
+function loadFeats(feats){tkLayer.clearLayers();tkLayer.addData(feats);tkIndex=new Map();tkLayer.eachLayer(l=>{const pc=String(l.feature.properties.postcode);const c=l.getLatLng();tkIndex.set(pc,L.latLng(c.lat,c.lng));});setLabels(labelsVisible);statusDiv.textContent='OK · ΤΚ: '+feats.length;updateSummary();try{localStorage.setItem('tk_cache_v1', toCSV(feats));}catch(_){} }
 
-function loadFromCSVString(csv){
-  try{
-    const feats=parseCSV(csv);
-    tkCentroidsLayer.clearLayers(); tkCentroidsLayer.addData(feats);
-    tkCentroids=feats.slice();
-    tkIndex=new Map(feats.map(f=>[f.properties.postcode, f.geometry.coordinates]));
-    statusDiv.textContent=`OK ✔︎ Φορτώθηκαν ${feats.length} ΤΚ (CSV, 4-ψηφ.).`;;
-    updateTkLabels();
-    recomputeAssignments();
-  }catch(err){
-    console.error('CSV load error', err);
-    statusDiv.textContent='Σφάλμα φόρτωσης CSV: '+err.message;
-  }
-}
+// ——— Assignment helpers
+function nearestTK(latlng){let best=null,bestD=Infinity;tkLayer.eachLayer(l=>{const d=map.distance(latlng,l.getLatLng());if(d<bestD){bestD=d;best=l;}});return best?String(best.feature.properties.postcode):null;}
+function updateSummary(){const rows=[];const pts=registry.map(r=>({id:r.id,lat:r.m.getLatLng().lat,lon:r.m.getLatLng().lng}));tkLayer.eachLayer(l=>{const pc=String(l.feature.properties.postcode);const c=l.getLatLng();let best={id:null,d:Infinity};for(let i=0;i<pts.length;i++){const p=pts[i];const d=Math.hypot(c.lat-p.lat,c.lng-p.lon);if(d<best.d){best={id:p.id,d};}}if(best.id!=null)rows.push({postcode:pc,marker_id:best.id});});summaryDiv.textContent='Κατανεμημένοι: '+rows.length+' · Markers: '+registry.length;markersDiv.innerHTML='';for(let i=0;i<registry.length;i++){const r=registry[i];const here=nearestTK(r.m.getLatLng())||'—';const card=document.createElement('div');card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center"><strong>Marker #'+r.id+'</strong><button data-id="'+r.id+'" class="rm">✖︎</button></div><div class="muted">'+r.m.getLatLng().lat.toFixed(5)+', '+r.m.getLatLng().lng.toFixed(5)+' · Κάτω από marker: '+here+'</div>';markersDiv.appendChild(card);}Array.from(markersDiv.querySelectorAll('.rm')).forEach(btn=>btn.addEventListener('click',()=>{const id=+btn.getAttribute('data-id');const idx=registry.findIndex(x=>x.id===id);if(idx>-1){markersLayer.removeLayer(registry[idx].m);registry.splice(idx,1);updateSummary();}}));
+  try{localStorage.setItem('markers_v1',JSON.stringify(registry.map(r=>({id:r.id,lat:r.m.getLatLng().lat,lon:r.m.getLatLng().lng}))));}catch(_){}}
+function exportRows(){const rows=[];if(!registry.length)return rows;const pts=registry.map(r=>({id:r.id,lat:r.m.getLatLng().lat,lon:r.m.getLatLng().lng}));tkLayer.eachLayer(l=>{const pc=String(l.feature.properties.postcode);const c=l.getLatLng();let best={id:null,d:Infinity};for(let i=0;i<pts.length;i++){const p=pts[i];const d=Math.hypot(c.lat-p.lat,c.lng-p.lon);if(d<best.d){best={id:p.id,d};}}if(best.id!=null)rows.push({postcode:pc,marker_id:best.id});});return rows;}
 
-function loadOfflinePostcodes(){ loadFromCSVString(csvData); }
-loadOfflinePostcodes();
+// ——— Export helpers
+function downloadCSV(name,content){const blob=new Blob([content],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+function writeXLSX(name,rows){const wb=XLSX.utils.book_new();const ws=XLSX.utils.json_to_sheet(rows);XLSX.utils.book_append_sheet(wb,ws,'Assignments');XLSX.writeFile(wb,name);}
 
-// ===== Search bar =====
-searchBtn.onclick = ()=> handleSearch();
-searchInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter') handleSearch(); });
-async function handleSearch(){
-  const code=(searchInput.value||'').trim().replace(/\s+/g,''); if(!code) return;
-  let coord=tkIndex.get(code);
-  if(!coord){ alert('Δεν βρέθηκε ο ΤΚ '+code); return; }
-  const latlng=[coord[1],coord[0]]; map.setView(latlng, Math.max(13,map.getZoom()), {animate:true});
-  flashHighlight(latlng, code);
-}
-function flashHighlight(latlng, code){
-  try{ highlightLayer.clearLayers(); }catch{}
-  L.circle(latlng, { radius:500, weight:2, color:'#2563eb', fillOpacity:0.12 }).addTo(highlightLayer);
-  L.circleMarker(latlng, { radius:7, weight:2 }).addTo(highlightLayer).bindTooltip('ΤΚ '+code);
-  setTimeout(()=>{ try{highlightLayer.clearLayers();}catch{} }, 4500);
-}
+// ——— Search
+async function geocode(q){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=cy&limit=5&q='+encodeURIComponent(q);try{const r=await fetch(u,{headers:{'Accept-Language':'el,en'}});if(!r.ok)throw 0;const arr=await r.json();return arr.map((o,i)=>({id:'a'+i,label:o.display_name,latlng:L.latLng(parseFloat(o.lat),parseFloat(o.lon)),zoom:16,marker:true}))}catch(e){return[]}}
+function searchTK(q){const val=String(q).trim();const items=[];if(/^\d{4}$/.test(val)&&tkIndex.has(val)){items.push({id:'p-'+val,label:'ΤΚ '+val,latlng:tkIndex.get(val),zoom:15,marker:true})}tkIndex.forEach((v,k)=>{if(String(k).startsWith(val)&&String(k)!==val)items.push({id:'p-'+k,label:'ΤΚ '+k,latlng:v,zoom:15,marker:true})});return items.slice(0,10)}
+function renderResults(items){if(!items.length){searchResults.innerHTML='<span class="muted">—</span>';return}let html='';for(let i=0;i<items.length;i++){const it=items[i];html+='<div class="item" data-id="'+it.id+'" style="cursor:pointer">'+it.label+'</div>'}searchResults.innerHTML=html;Array.from(searchResults.children).forEach(div=>div.addEventListener('click',()=>{const id=div.getAttribute('data-id');const it=items.find(x=>String(x.id)===String(id));if(!it)return;map.setView(it.latlng,it.zoom||15);if(it.marker){searchLayer.clearLayers();L.marker(it.latlng).addTo(searchLayer).bindPopup(it.label).openPopup()}}))}
+async function handleSearch(){const q=searchInput.value.trim();if(!q){searchResults.innerHTML='';return}if(/^[0-9]{3,5}$/.test(q)){const items=searchTK(q);renderResults(items);if(items.length){map.setView(items[0].latlng,items[0].zoom||15);searchLayer.clearLayers();L.marker(items[0].latlng).addTo(searchLayer).bindPopup(items[0].label).openPopup()}return}const items=await geocode(q);renderResults(items);if(items.length){map.setView(items[0].latlng,items[0].zoom||16);searchLayer.clearLayers();L.marker(items[0].latlng).addTo(searchLayer).bindPopup(items[0].label).openPopup()}}
 
-// ===== Κατανομή =====
-function recomputeAssignments(){
-  assignmentDiv.innerHTML='';
-  if(markersRegistry.length===0 || tkCentroids.length===0) return;
-  const markerPts=markersRegistry.map(r=>({id:r.id,pt:turf.point([r.marker.getLatLng().lng,r.marker.getLatLng().lat])}));
-  const assign=new Map(); markersRegistry.forEach(r=>assign.set(r.id,{codes:[],total:0}));
-  for(const f of tkCentroids){
-    let bestId=null, bestD=Infinity; const tkpt=f;
-    for(const m of markerPts){ const d=turf.distance(m.pt, tkpt,{units:'kilometers'}); if(d<bestD-1e-9){ bestD=d; bestId=m.id; } }
-    if(bestId!=null){ const slot=assign.get(bestId); slot.codes.push(f.properties.postcode); slot.total++; }
-  }
-  let total=0; for(const [id,slot] of assign.entries()){
-    total+=slot.total; const el=document.getElementById(`assign-count-${id}`); if(el) el.textContent=`· ${slot.total} ΤΚ`;
-    const listEl=document.getElementById(`marker-tklist-${id}`);
-    if(listEl) listEl.innerHTML=slot.codes.sort((a,b)=>a.localeCompare(b)).join(', ');
-  }
-  assignmentDiv.textContent=`Σύνολο ΤΚ: ${tkCentroids.length} · Κατανεμημένοι: ${total} · Markers: ${markersRegistry.length}`;
-}
+// ——— Offline seed
+const OFFLINE_CSV='postcode,lat,lon\n1010,35.1700,33.3600\n1020,35.1700,33.3700\n1030,35.1500,33.3700\n1040,35.1560,33.3650\n1055,35.1700,33.3400\n1060,35.1800,33.3600\n1070,35.1700,33.3800\n1080,35.1900,33.3500';
+function loadOffline(){const feats=fromCSV(OFFLINE_CSV);loadFeats(feats)}
 
-// Update marker labels position on drag (extra safety)
-markersLayer.on('layeradd', (e)=>{
-  if(e.layer && e.layer.on){
-    e.layer.on('drag', ()=>{
-      const ent = markersRegistry.find(x=>x.marker===e.layer);
-      if(ent && ent.label){ ent.label.setLatLng(e.layer.getLatLng()); }
-    });
-  }
-});
+// ——— Import / cache / buttons
+addMarkerBtn.onclick=()=>{addMode=!addMode;addMarkerBtn.textContent=addMode?'Κλικ στον χάρτη':'Προσθήκη Marker'};
+reassignBtn.onclick=()=>updateSummary();
+exportCsvBtn.onclick=()=>{const rows=exportRows();if(!rows.length){alert('Βάλε marker.');return}const header='postcode,marker_id\n';const body=rows.map(r=>r.postcode+','+r.marker_id).join('\n');downloadCSV('postcode_partition.csv',header+body)};
+exportXlsxBtn.onclick=()=>{const rows=exportRows();if(!rows.length){alert('Βάλε marker.');return}writeXLSX('postcode_partition.xlsx',rows)};
+toggleLabelsBtn.onclick=()=>{labelsVisible=!labelsVisible;setLabels(labelsVisible)};
+map.on('click',e=>{if(!addMode)return;const m=L.marker(e.latlng,{draggable:true}).addTo(markersLayer);m.on('dragend',updateSummary);registry.push({id:nextId++,m});addMode=false;addMarkerBtn.textContent='Προσθήκη Marker';updateSummary()});
+importBtn.onclick=()=>fileInput.click();
+clearCacheBtn.onclick=()=>{localStorage.removeItem('tk_cache_v1');statusDiv.textContent='Cache καθαρίστηκε'};
+fileInput.onchange=()=>{const f=fileInput.files&&fileInput.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const text=String(reader.result);let feats=[];if(/\{\s*"type"\s*:\s*"FeatureCollection"/i.test(text)||/\.geojson$/i.test(f.name)||/\.json$/i.test(f.name)){feats=fromGeoJSON(text)}else{feats=fromCSV(text)}if(!feats.length)throw new Error('Άδειο/ασύμβατο αρχείο');loadFeats(feats);statusDiv.textContent='OK · Offline (εισαγωγή)'}catch(e){statusDiv.textContent='Σφάλμα εισαγωγής: '+(e&&e.message?e.message:'')}};reader.readAsText(f)};
+searchBtn.onclick=()=>handleSearch();
+clearSearchBtn.onclick=()=>{searchInput.value='';searchResults.innerHTML='';searchLayer.clearLayers()};
 
-// ===== Exports =====
-function computeAssignmentRows(){
-  const rows=[]; if(markersRegistry.length===0) return rows;
-  const markerPts=markersRegistry.map(r=>({id:r.id,pt:turf.point([r.marker.getLatLng().lng,r.marker.getLatLng().lat])}));
-  for(const f of tkCentroids){
-    let best={id:null,km:Infinity};
-    for(const m of markerPts){ const km=turf.distance(m.pt,f,{units:'kilometers'}); if(km<best.km-1e-9){ best={id:m.id,km}; } }
-    if(best.id!=null){
-      const note = (markersRegistry.find(x=>x.id===best.id)?.note)||'';
-      rows.push({postcode:f.properties.postcode,marker_id:best.id,marker_note:note,distance_km:+best.km.toFixed(4)});
-    }
-  }
-  return rows;
-}
-exportBtn.onclick=()=>{
-  const rows=computeAssignmentRows(); if(!rows.length){ alert('Βάλε τουλάχιστον 1 marker.'); return; }
-  const header='postcode,marker_id,marker_note,distance_km\n';
-  const body=rows.map(r=>`${r.postcode},${r.marker_id},"${(r.marker_note||'').replace(/"/g,'""')}",${r.distance_km}`).join('\n');
-  const blob=new Blob([header+body],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='postcode_partition.csv'; a.click();
-};
-exportExcelBtn.onclick=()=>{
-  const rows=computeAssignmentRows(); if(!rows.length){ alert('Βάλε τουλάχιστον 1 marker.'); return; }
-  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.json_to_sheet(rows); XLSX.utils.book_append_sheet(wb,ws,'Assignments'); XLSX.writeFile(wb,'postcode_partition.xlsx');
-};
+// ——— Paste list → geocode (Nominatim)
+function parsePostcodeList(text){const found=String(text||'').match(/\b\d{4}\b/g)||[];const set=new Set(found);return Array.from(set).sort()}
+async function geocodeOne(pc){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&country=Cyprus&postalcode='+encodeURIComponent(pc)+'&limit=1';const r=await fetch(u,{headers:{'Accept-Language':'el,en'}});if(!r.ok)throw new Error('net');const arr=await r.json();if(!Array.isArray(arr)||!arr.length)throw new Error('notfound');const a=arr[0];const lat=parseFloat(a.lat),lon=parseFloat(a.lon);if(!Number.isFinite(lat)||!Number.isFinite(lon))throw new Error('coords');return {pc,lat,lon}}
+async function geocodeList(postcodes){const feats=[];for(let i=0;i<postcodes.length;i++){const pc=postcodes[i];statusDiv.textContent='Γεωκωδικοποίηση '+pc+' ('+(i+1)+'/'+postcodes.length+')';try{const {lat,lon}=await geocodeOne(pc);feats.push({type:'Feature',properties:{postcode:String(pc)},geometry:{type:'Point',coordinates:[lon,lat]}})}catch(e){}await new Promise(res=>setTimeout(res,1100))}return feats}
+pasteListBtn.onclick=()=>{pasteBox.style.display=pasteBox.style.display==='none'?'flex':'none'};
+geocodeListBtn.onclick=async()=>{const list=parsePostcodeList(pasteArea.value);if(!list.length){alert('Δεν βρέθηκαν 4ψήφιοι ΤΚ στη λίστα.');return}geocodeListBtn.disabled=true;try{const feats=await geocodeList(list);if(!feats.length){statusDiv.textContent='Δεν βρέθηκαν συντεταγμένες για τη λίστα.'}else{loadFeats(feats);statusDiv.textContent='OK · Geocoded '+feats.length+' ΤΚ'}}finally{geocodeListBtn.disabled=false}};
 
-// ===== Overpass fetch-all & cache =====
-const OVERPASS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://lz4.overpass-api.de/api/interpreter',
-  'https://z.overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter'
-];
-const OP_QUERY = `
-[out:json][timeout:180];
-area["ISO3166-1"="CY"][admin_level=2]->.a;
-(
-  node(area.a)["addr:postcode"];
-  way(area.a)["addr:postcode"];
-  relation(area.a)["addr:postcode"];
-  relation(area.a)["postal_code"];
-  relation(area.a)["boundary"="postal_code"];
-);
-out center tags;
-`;
-async function fetchOverpassWithRetry(){
-  let lastErr=null;
-  for(let i=0;i<OVERPASS.length;i++){
-    const base=OVERPASS[i]; statusDiv.textContent=`Σύνδεση Overpass ${i+1}/${OVERPASS.length}…`;
-    try{
-      const getUrl = base + '?data=' + encodeURIComponent(OP_QUERY);
-      const resG = await fetch(getUrl, { method:'GET' });
-      if(resG.ok){ return await resG.json(); }
-      lastErr = new Error('HTTP GET '+resG.status);
-    }catch(err){ lastErr=err; }
-    try{
-      const body=new URLSearchParams(); body.set('data', OP_QUERY);
-      const res=await fetch(base,{method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}, body});
-      if(res.ok){ return await res.json(); }
-      lastErr = new Error('HTTP POST '+res.status);
-    }catch(err){ lastErr=err; }
-  }
-  throw lastErr||new Error('All Overpass mirrors failed');
-}
-function elementsToFeatures(elements){
-  const buckets=new Map();
-  for(const el of elements||[]){
-    const tags=el.tags||{}; const code=tags['addr:postcode']||tags['postcode']||tags['postal_code'];
-    if(!code || !isFreeCYPostcode(code)) continue;
-    let lon=null,lat=null;
-    if(el.type==='node'){ lon=el.lon; lat=el.lat; }
-    else if(el.center){ lon=el.center.lon; lat=el.center.lat; }
-    else if(el.bounds){ const b=el.bounds; lon=(b.minlon+b.maxlon)/2; lat=(b.minlat+b.maxlat)/2; }
-    else if(Array.isArray(el.geometry) && el.geometry.length){
-      try{ const coords = el.geometry.map(g=>[g.lon,g.lat]); const line = turf.lineString(coords); const c=turf.center(line).geometry.coordinates; lon=c[0]; lat=c[1]; }catch(e){}
-    }
-    if(typeof lon==='number'&&typeof lat==='number'&&isFinite(lon)&&isFinite(lat)){
-      if(!buckets.has(code)) buckets.set(code, []);
-      buckets.get(code).push([lon,lat]);
-    }
-  }
-  const feats=[]; for(const [code,arr] of buckets){
-    const sum=arr.reduce((a,c)=>[a[0]+c[0],a[1]+c[1]],[0,0]);
-    const lon=sum[0]/arr.length, lat=sum[1]/arr.length;
-    feats.push({type:'Feature',properties:{postcode:String(code)},geometry:{type:'Point',coordinates:[lon,lat]}});
-  }
-  return feats;
-}
-fetchAllBtn.onclick = async ()=>{
-  try{
-    statusDiv.textContent='Φέρνω όλους τους ΤΚ από Overpass…';
-    const data = await fetchOverpassWithRetry();
-    const feats = elementsToFeatures(data.elements);
-    if(!feats.length) throw new Error('Δεν βρέθηκαν στοιχεία ΤΚ');
-    const header='postcode,lat,lon\n';
-    const body = feats.map(f=>`${f.properties.postcode},${f.geometry.coordinates[1]},${f.geometry.coordinates[0]}`).join('\n');
-    const csv = header+body;
-    localStorage.setItem('tk_offline_csv', csv);
-    csvData = csv;
-    loadFromCSVString(csv);
-    statusDiv.textContent=`OK ✔︎ Cache ενημερώθηκε με ${feats.length} ΤΚ και φορτώθηκαν στο χάρτη.`;
-  }catch(err){ 
-    statusDiv.textContent='Σφάλμα Overpass: '+(err && err.message ? err.message : err);
-    console.error('Overpass fetch error', err);
-  }
-};
-clearCacheBtn.onclick = ()=>{ localStorage.removeItem('tk_offline_csv'); alert('Καθαρίστηκε η cache ΤΚ. Θα χρησιμοποιηθεί το ενσωματωμένο δείγμα.'); };
+// ——— Quick Edit (μεμονωμένοι ΤΚ)
+function getAllFeats(){const feats=[];tkLayer.eachLayer(l=>{const pc=String(l.feature.properties.postcode);const c=l.getLatLng();feats.push({type:'Feature',properties:{postcode:pc},geometry:{type:'Point',coordinates:[c.lng,c.lat]}})});return feats}
+function rebuildIndex(){tkIndex=new Map();tkLayer.eachLayer(l=>{const pc=String(l.feature.properties.postcode);const c=l.getLatLng();tkIndex.set(pc,L.latLng(c.lat,c.lng))})}
+function upsertPostcode(pc,lat,lon){if(!/^\d{4}$/.test(String(pc)))throw new Error('Άκυρος ΤΚ');if(!Number.isFinite(lat)||!Number.isFinite(lon))throw new Error('Άκυρες συντεταγμένες');let target=null;tkLayer.eachLayer(l=>{if(!target&&String(l.feature.properties.postcode)===String(pc))target=l});if(target){target.setLatLng([lat,lon])}else{tkLayer.addData({type:'Feature',properties:{postcode:String(pc)},geometry:{type:'Point',coordinates:[lon,lat]}})}rebuildIndex();setLabels(labelsVisible);try{localStorage.setItem('tk_cache_v1', toCSV(getAllFeats()))}catch(_){}statusDiv.textContent='OK · ενημερώθηκε ο ΤΚ '+pc}
+let qePickMode=false;const mapClickHandler=(e)=>{if(!qePickMode)return;qeLat.value=e.latlng.lat.toFixed(6);qeLon.value=e.latlng.lng.toFixed(6);qePickMode=false;statusDiv.textContent='Έτοιμο: συμπληρώθηκαν lat/lon από χάρτη'};
+qePick.onclick=()=>{qePickMode=!qePickMode;statusDiv.textContent=qePickMode?'Κάνε κλικ στον χάρτη για lat/lon…':'Pick ακυρώθηκε'};
+qeApply.onclick=()=>{const pc=qePostcode.value.trim();const lat=parseFloat(qeLat.value);const lon=parseFloat(qeLon.value);try{upsertPostcode(pc,lat,lon)}catch(e){alert(e.message||'Σφάλμα');return}};
+map.on('click',mapClickHandler);
 
-// ===== Self tests =====
-(function runTests(){
-  const lines=[]; const ok=(c,m)=>lines.push(`${c?'✔︎':'✖︎'} ${m}`);
-  try{ ok(typeof L!=='undefined' && !!map, 'TC1: Leaflet αρχικοποιήθηκε'); }catch{ ok(false,'TC1: Leaflet'); }
-  try{ const s='a\nb'; ok(s.split('\n').length===2, 'TC2: newline escape δουλεύει'); }catch{ ok(false,'TC2'); }
-  try{ const rows=[{postcode:'1010',marker_id:1,distance_km:1.23}]; const header='postcode,marker_id,distance_km\n'; const body=rows.map(r=>`${r.postcode},${r.marker_id},${r.distance_km}`).join('\n'); ok((header+body).includes('\n'),'TC3: CSV builder'); }catch{ ok(false,'TC3'); }
-  testsDiv.innerHTML = lines.map(x=>`<div>${x}</div>`).join('');
-})();
+// ——— Save/Load (JSON) + Autosave markers
+function downloadJSON(name,obj){const blob=new Blob([JSON.stringify(obj)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+saveStateBtn.onclick=()=>{const state={version:'v2.14.0',labelsVisible,tk_csv:toCSV(getAllFeats()),markers:registry.map(r=>({id:r.id,lat:r.m.getLatLng().lat,lon:r.m.getLatLng().lng}))};downloadJSON('tk_state.json',state);statusDiv.textContent='Αποθηκεύτηκε η κατάσταση (json)'};
+loadStateBtn.onclick=async()=>{try{const r=await fetch('./state.json',{cache:'no-store'});if(r.ok){const st=await r.json();await loadStateObject(st);return}}catch(_){}
+const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;const reader=new FileReader();reader.onload=async()=>{try{const st=JSON.parse(String(reader.result));await loadStateObject(st)}catch(e){alert('Κατεστραμμένο JSON')}};reader.readAsText(f)};inp.click()};
+async function loadStateObject(st){if(!st||!st.tk_csv)throw new Error('missing tk_csv');const feats=fromCSV(st.tk_csv);loadFeats(feats);labelsVisible=!!st.labelsVisible;setLabels(labelsVisible);markersLayer.clearLayers();registry=[];nextId=1;(st.markers||[]).forEach(m=>{const mark=L.marker([m.lat,m.lon],{draggable:true}).addTo(markersLayer);mark.on('dragend',updateSummary);registry.push({id:nextId++,m:mark})});updateSummary();statusDiv.textContent='OK · Φορτώθηκε κατάσταση'}
+
+// ——— GitHub API helpers (client-side; token required)
+function b64(str){return btoa(unescape(encodeURIComponent(str)))}
+function saveGhSettings(){try{localStorage.setItem('gh_cfg',JSON.stringify({o:ghOwner.value||'',r:ghRepo.value||'',b:ghBranch.value||'main',p:ghPath.value||'state.json'}))}catch(_){} }
+function loadGhSettings(){try{const v=JSON.parse(localStorage.getItem('gh_cfg')||'null');if(v){ghOwner.value=v.o||'';ghRepo.value=v.r||'';ghBranch.value=v.b||'main';ghPath.value=v.p||'state.json'}}catch(_){} }
+async function ghGet(o,r,p,b){const u=`https://api.github.com/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/contents/${p}?ref=${encodeURIComponent(b||'main')}`;const res=await fetch(u,{headers:{'Accept':'application/vnd.github+json'}});if(res.status===404)return null; if(!res.ok)throw new Error('GH get failed');return res.json()}
+async function ghPut(o,r,p,b,token,content,msg,sha){const u=`https://api.github.com/repos/${encodeURIComponent(o)}/${encodeURIComponent(r)}/contents/${p}`;const body={message:msg||'Update state.json',content:b64(content),branch:b||'main'};if(sha)body.sha=sha;const res=await fetch(u,{method:'PUT',headers:{'Accept':'application/vnd.github+json','Authorization':`Bearer ${token}`},body:JSON.stringify(body)});if(!res.ok)throw new Error('GH put failed');return res.json()}
+function currentStateString(){const state={version:'v2.14.0',labelsVisible,tk_csv:toCSV(getAllFeats()),markers:registry.map(r=>({id:r.id,lat:r.m.getLatLng().lat,lon:r.m.getLatLng().lng}))};return JSON.stringify(state)}
+
+ghSaveBtn.onclick=async()=>{const o=ghOwner.value.trim(),r=ghRepo.value.trim(),b=(ghBranch.value.trim()||'main'),p=(ghPath.value.trim()||'state.json'),t=ghToken.value.trim();if(!o||!r||!t){alert('Συμπλήρωσε owner, repo, token.');return}saveGhSettings();statusDiv.textContent='GitHub: αποθήκευση…';try{let sha=null;const meta=await ghGet(o,r,p,b);if(meta&&meta.sha)sha=meta.sha;const payload=currentStateString();await ghPut(o,r,p,b,t,payload,'TK Finder: save state',sha);statusDiv.textContent='OK · Αποθηκεύτηκε στο GitHub ('+o+'/'+r+':'+p+')'}catch(e){console.error(e);statusDiv.textContent='Σφάλμα GitHub save'} };
+
+ghLoadBtn.onclick=async()=>{const o=ghOwner.value.trim(),r=ghRepo.value.trim(),b=(ghBranch.value.trim()||'main'),p=(ghPath.value.trim()||'state.json');if(!o||!r){alert('Συμπλήρωσε owner, repo.');return}saveGhSettings();statusDiv.textContent='GitHub: φόρτωση…';try{const meta=await ghGet(o,r,p,b);if(!meta||!meta.download_url)throw new Error('not found');const r2=await fetch(meta.download_url,{cache:'no-store'});const st=await r2.json();await loadStateObject(st);statusDiv.textContent='OK · Φορτώθηκε από GitHub'}catch(e){console.error(e);statusDiv.textContent='Σφάλμα GitHub load'}}
+
+loadGhSettings();
+
+// ——— Init (cloud → cache → offline seed) + restore markers
+(async function init(){try{const r=await fetch('./state.json',{cache:'no-store'});if(r.ok){const st=await r.json();await loadStateObject(st);return}}catch(_){}
+const cached=localStorage.getItem('tk_cache_v1');if(cached){try{const feats=fromCSV(cached);if(feats.length){loadFeats(feats);statusDiv.textContent='OK · Cache'}else{throw 0}}catch(_){statusDiv.textContent='Offline μέχρι να γίνει εισαγωγή ή γεωκωδικοποίηση.';loadOffline()}}else{statusDiv.textContent='Offline μέχρι να γίνει εισαγωγή ή γεωκωδικοποίηση.';loadOffline()}
+try{const saved=JSON.parse(localStorage.getItem('markers_v1')||'[]');if(Array.isArray(saved)&&saved.length){registry=[];nextId=1;saved.forEach(m=>{const mark=L.marker([m.lat,m.lon],{draggable:true}).addTo(markersLayer);mark.on('dragend',updateSummary);registry.push({id:nextId++,m:mark})});updateSummary()}}catch(_){}}
+)();
+
+// ——— Tiny tests
+(function runTests(){try{console.assert(fromCSV('postcode,lat,lon\n1234,35.1,33.1').length===1,'CSV basic');const feats=[{type:'Feature',properties:{postcode:'1234'},geometry:{type:'Point',coordinates:[33.1,35.1]}}];const csv=toCSV(feats);console.assert(/1234,35\.1,33\.1/.test(csv),'toCSV');const gj={type:'FeatureCollection',features:[{type:'Feature',properties:{POST_CODE:1234},geometry:{type:'Polygon',coordinates:[[[33,35],[33.2,35],[33.2,35.2],[33,35.2],[33,35]]]}}]};console.assert(fromGeoJSON(gj).length===1,'GeoJSON centroid')}catch(e){console.warn('Tests failed',e)}})();
 </script>
 </body>
 </html>
